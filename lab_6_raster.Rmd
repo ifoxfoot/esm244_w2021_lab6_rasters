@@ -1,0 +1,104 @@
+---
+title: "Raster Data"
+author: "Iris Foxfoot"
+date: "2/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(raster)
+library(tidyverse)
+library(here)
+library(sf)
+library(fasterize)
+library(rgdal)
+```
+
+#the data
+
+```{r}
+#from a sattelite
+landsat_file <- here("data/Landsat7.tif")
+
+ls_1 <- raster(landsat_file)
+```
+
+```{r}
+plot(ls_1)
+```
+
+```{r}
+ls_2 <- raster(landsat_file, band = 2)
+ls_3 <- raster(landsat_file, band = 3)
+ls_4 <- raster(landsat_file, band = 4)
+
+ls_stack <- raster::stack(landsat_file)
+ls_stack
+```
+
+#preparing the data
+```{r}
+ls_1 <- raster::aggregate(ls_1, fact = 3, fun = mean)
+ls_2 <- raster::aggregate(ls_2, fact = 3, fun = mean)
+ls_3 <- raster::aggregate(ls_3, fact = 3, fun = mean)
+ls_4 <- raster::aggregate(ls_4, fact = 3, fun = mean)
+plot(ls_1, col = hcl.colors(n = 100, palette = 'Blues 2'))
+plot(ls_2, col = hcl.colors(n = 100, palette = 'Greens 2'))
+plot(ls_3, col = hcl.colors(n = 100, palette = 'Reds 2'))
+plot(ls_4, col = hcl.colors(n = 100, palette = 'Reds 2'))
+```
+```{r}
+sbc_rast <- raster(here("data/county.tif"))
+plot(sbc_rast)
+plot(ls_3)
+ls_3 <- mask(ls_3, sbc_rast)
+ls_4 <- mask(ls_4, sbc_rast)
+```
+
+#raster algebra
+```{r}
+vect1 <- 1:5
+vect1 * 2
+#can do same with rasters, can also add rasters together
+
+
+```
+
+## raster::calc()
+```{r}
+ls_stack <- stack(ls_1, ls_2, ls_3, ls_4)
+ls_mean <- raster::calc(ls_stack, fun = mean, na.rm = TRUE)
+
+plot(ls_mean)
+```
+NDVI
+$$NDVI = \frac{NIR-red}{NIR +red}$$
+```{r}
+ndvi <- (ls_4 - ls_3)/(ls_4 +ls_3)
+plot(ndvi, col = hcl.colors(100, "Grays"))
+```
+
+```{r}
+is_forest <- function(x, thresh = .3) {
+  y <- ifelse(x>= .25, 1, NA)
+  return(y)
+}
+
+forest <- calc(ndvi, fun = is_forest)
+
+plot(forest, col = "green")
+```
+
+#ggplot and rasters
+(don't play nice)
+```{r}
+ndvi_df <- raster::rasterToPoints(ndvi) %>% as.data.frame()
+
+forest_df <- raster::rasterToPoints(forest) %>% 
+  as.data.frame()
+
+ggplot(data = ndvi_df, aes(x = x, y =y, fill = layer)) + geom_raster() + geom_raster(data = forest_df, fill = "green") + coord_sf(expand = 0) +
+  scale_fill_gradient(low = "black", high = "white") + theme_void() + theme(panel.background = element_rect(fill = "blue"))
+```
+
